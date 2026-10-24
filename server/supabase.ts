@@ -1,14 +1,38 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://hhgbinzhptehhtrgqpby.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_wm80iwzCXiyRmkkx8UxVng_HpeAz_wr';
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  'https://hhgbinzhptehhtrgqpby.supabase.co';
+
+const SUPABASE_KEY =
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  'sb_publishable_wm80iwzCXiyRmkkx8UxVng_HpeAz_wr';
 
 export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false },
 });
 
+const getProjectId = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    const hostParts = parsed.hostname.split('.');
+    if (hostParts.length >= 3 && hostParts[1] === 'supabase') {
+      return hostParts[0];
+    }
+  } catch (e) {}
+  return 'hhgbinzhptehhtrgqpby';
+};
+
+const PROJECT_ID = process.env.SUPABASE_PROJECT_ID || getProjectId(SUPABASE_URL);
+
 export const SUPABASE_CONFIG = {
-  projectId: 'hhgbinzhptehhtrgqpby',
+  projectId: PROJECT_ID,
   url: SUPABASE_URL,
   keyMasked: SUPABASE_KEY ? `${SUPABASE_KEY.slice(0, 8)}...${SUPABASE_KEY.slice(-6)}` : '',
 };
@@ -191,7 +215,7 @@ export async function checkSupabaseStatus(): Promise<{
       return {
         connected: true,
         tablesReady: true,
-        message: 'Connected to Supabase project hhgbinzhptehhtrgqpby (all tables live and ready).',
+        message: `Connected to Supabase project ${PROJECT_ID} (all tables live and ready).`,
       };
     }
 
@@ -199,7 +223,7 @@ export async function checkSupabaseStatus(): Promise<{
       return {
         connected: true,
         tablesReady: false,
-        message: 'Connected to Supabase project hhgbinzhptehhtrgqpby. Please run the provided SQL in Supabase SQL editor to create the tables.',
+        message: `Connected to Supabase project ${PROJECT_ID}. Please run the provided SQL in Supabase SQL editor to create the tables.`,
       };
     }
 
@@ -215,4 +239,71 @@ export async function checkSupabaseStatus(): Promise<{
       message: err.message || 'Could not connect to Supabase endpoint.',
     };
   }
+}
+
+/**
+ * Hydrate local database cache from remote Supabase on startup
+ */
+export async function pullSupabaseData(
+  runSql: (sql: string, params?: any[]) => any
+): Promise<{ studentsCount: number; attendanceCount: number }> {
+  let studentsCount = 0;
+  let attendanceCount = 0;
+
+  try {
+    const { data: remoteStudents, error: sErr } = await supabase.from('students').select('*');
+    if (!sErr && remoteStudents && remoteStudents.length > 0) {
+      const now = new Date().toISOString();
+      for (const s of remoteStudents) {
+        if (!s.student_id || !s.full_name) continue;
+        runSql(
+          `INSERT OR REPLACE INTO students (
+            student_id, full_name, class_number, roll_number, gender, guardian_name, guardian_phone, email, address, admission_date, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            s.student_id,
+            s.full_name,
+            s.class_number || 1,
+            s.roll_number || 1,
+            s.gender || 'Male',
+            s.guardian_name || '',
+            s.guardian_phone || '',
+            s.email || '',
+            s.address || '',
+            s.admission_date || now.split('T')[0],
+            s.status || 'active',
+            s.created_at || now,
+            s.updated_at || now,
+          ]
+        );
+        studentsCount++;
+      }
+    }
+
+    const { data: remoteAttendance, error: aErr } = await supabase.from('attendance').select('*');
+    if (!aErr && remoteAttendance && remoteAttendance.length > 0) {
+      const now = new Date().toISOString();
+      for (const a of remoteAttendance) {
+        if (!a.student_id || !a.date || !a.status) continue;
+        runSql(
+          `INSERT OR REPLACE INTO attendance (student_id, class_number, date, status, remarks, marked_by, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            a.student_id,
+            a.class_number || 1,
+            a.date,
+            a.status,
+            a.remarks || '',
+            a.marked_by || 'admin',
+            a.updated_at || now,
+          ]
+        );
+        attendanceCount++;
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Supabase Sync] Background cache pull notice:', err.message);
+  }
+
+  return { studentsCount, attendanceCount };
 }

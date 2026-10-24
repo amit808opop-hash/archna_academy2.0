@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { AcademySettings, ClassInfo, AdminUser, StaffUser } from '../types/index.ts';
-import { api } from '../utils/api.ts';
+import { api, resolveApiUrl } from '../utils/api.ts';
 
 interface SettingsViewProps {
   user?: AdminUser | null;
@@ -1023,7 +1023,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ user, showToast, onL
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
               <button
-                onClick={() => window.open('/api/reports/export-csv?type=students', '_blank')}
+                onClick={() => window.open(resolveApiUrl('/api/reports/export-csv?type=students'), '_blank')}
                 className="p-4 rounded-xl border border-slate-200 hover:border-blue-400 bg-slate-50/70 hover:bg-white text-left transition-all group cursor-pointer"
               >
                 <div className="flex items-center justify-between mb-1">
@@ -1036,7 +1036,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ user, showToast, onL
               </button>
 
               <button
-                onClick={() => window.open('/api/reports/export-csv?type=attendance', '_blank')}
+                onClick={() => window.open(resolveApiUrl('/api/reports/export-csv?type=attendance'), '_blank')}
                 className="p-4 rounded-xl border border-slate-200 hover:border-blue-400 bg-slate-50/70 hover:bg-white text-left transition-all group cursor-pointer"
               >
                 <div className="flex items-center justify-between mb-1">

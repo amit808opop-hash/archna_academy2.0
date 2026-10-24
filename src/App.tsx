@@ -10,7 +10,7 @@ import { AttendanceView } from './views/AttendanceView.tsx';
 import { ReportsView } from './views/ReportsView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
 import { AdminUser } from './types/index.ts';
-import { setStoredToken, getStoredToken } from './utils/api.ts';
+import { setStoredToken, getStoredToken, resolveApiUrl } from './utils/api.ts';
 
 export default function App() {
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -59,7 +59,7 @@ export default function App() {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    fetch('/api/auth/me', { headers, credentials: 'include' })
+    fetch(resolveApiUrl('/api/auth/me'), { headers, credentials: 'include' })
       .then((res) => {
         if (!res.ok) throw new Error('Unauthenticated');
         return res.json();
@@ -94,7 +94,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      await fetch(resolveApiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' });
     } catch (err) {
       // Ignore
     }

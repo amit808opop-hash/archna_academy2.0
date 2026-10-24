@@ -1,9 +1,8 @@
 import express from 'express';
-import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb } from './server/db.js';
-import { apiRouter } from './server/routes.js';
+import { createApp } from './server/app.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,24 +13,8 @@ async function startServer() {
     await getDb();
     console.log('[ARCHNA ACADEMY] SQLite Database initialized successfully.');
 
-    const app = express();
+    const app = createApp();
     const PORT = parseInt(process.env.PORT || '3000', 10);
-
-    app.use(express.json({ limit: '10mb' }));
-    app.use(express.urlencoded({ extended: true }));
-    app.use(cookieParser());
-
-    // Mount API router
-    app.use('/api', apiRouter);
-
-    // Health check endpoint
-    app.get('/api/health', (req, res) => {
-      res.json({
-        status: 'ok',
-        app: 'ARCHNA ACADEMY – Student Attendance Management Portal',
-        timestamp: new Date().toISOString(),
-      });
-    });
 
     if (process.env.NODE_ENV === 'production') {
       const distPath = path.resolve(__dirname, 'dist');

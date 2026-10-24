@@ -2,45 +2,80 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
+import { pullSupabaseData } from './supabase.js';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+// Detect serverless environment (Vercel, AWS Lambda) where process.cwd() is read-only
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.VERCEL_ENV
+);
+
+const DATA_DIR = isServerless ? '/tmp/archna-data' : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'archna.sqlite');
 
 let dbInstance: SqlJsDatabase | null = null;
+let dbInitPromise: Promise<SqlJsDatabase> | null = null;
 let saveTimeout: NodeJS.Timeout | null = null;
 
 export async function getDb(): Promise<SqlJsDatabase> {
   if (dbInstance) {
     return dbInstance;
   }
-
-  const SQL = await initSqlJs();
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (dbInitPromise) {
+    return dbInitPromise;
   }
 
-  let db: SqlJsDatabase;
-  if (fs.existsSync(DB_FILE)) {
-    const fileBuffer = fs.readFileSync(DB_FILE);
-    db = new SQL.Database(fileBuffer);
-  } else {
-    db = new SQL.Database();
-  }
+  dbInitPromise = (async () => {
+    const SQL = await initSqlJs();
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+    } catch (e) {
+      console.warn('[DB] Notice: Directory creation skipped for serverless container:', e);
+    }
 
-  dbInstance = db;
-  initSchema(db);
-  persistDb();
-  return dbInstance;
+    let db: SqlJsDatabase;
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        const fileBuffer = fs.readFileSync(DB_FILE);
+        db = new SQL.Database(fileBuffer);
+      } else {
+        db = new SQL.Database();
+      }
+    } catch (e) {
+      db = new SQL.Database();
+    }
+
+    dbInstance = db;
+    initSchema(db);
+    persistDb();
+
+    // Pull any existing students and attendance from Supabase in the background
+    pullSupabaseData(run).catch((err) => {
+      console.warn('[DB] Supabase background hydration notice:', err);
+    });
+
+    return dbInstance;
+  })();
+
+  return dbInitPromise;
 }
 
 export function persistDb(): void {
   if (!dbInstance) return;
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     const data = dbInstance.export();
     const buffer = Buffer.from(data);
     fs.writeFileSync(DB_FILE, buffer);
   } catch (err) {
-    console.error('Error persisting SQLite database:', err);
+    // Non-fatal in serverless runtimes
+    console.warn('[DB] Notice: Disk snapshot skipped in serverless runtime.');
   }
 }
 

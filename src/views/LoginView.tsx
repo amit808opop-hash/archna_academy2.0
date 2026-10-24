@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Lock, User, AlertCircle, ArrowRight, Sparkles } from 'lucide-react';
 import { Logo } from '../components/Logo.tsx';
 import { AdminUser } from '../types/index.ts';
-import { setStoredToken } from '../utils/api.ts';
+import { setStoredToken, resolveApiUrl } from '../utils/api.ts';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AdminUser, token: string) => void;
@@ -33,7 +33,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const loginEndpoint = resolveApiUrl('/api/auth/login');
+      const response = await fetch(loginEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -43,10 +44,26 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         }),
       });
 
-      const data = await response.json();
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        // Non-JSON response (e.g. 502 bad gateway or 404 from misconfigured route)
+        if (response.status === 401 || response.status === 403) {
+          setError('Login failed. Please check your credentials.');
+        } else {
+          setError('Unable to connect. Please try again.');
+        }
+        setLoading(false);
+        return;
+      }
 
-      if (!response.ok || !data.success) {
-        setError(data.error || 'Invalid username or password. Please verify your credentials.');
+      if (!response.ok || !data?.success) {
+        if (response.status === 401 || response.status === 403) {
+          setError(data?.error || 'Login failed. Please check your credentials.');
+        } else {
+          setError(data?.error || 'Unable to connect. Please try again.');
+        }
         setLoading(false);
         return;
       }
@@ -58,7 +75,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
       onLoginSuccess(data.user, data.token);
     } catch (err: any) {
-      setError('Unable to reach the academy server. Please check your network and try again.');
+      setError('Unable to connect. Please try again.');
     } finally {
       setLoading(false);
     }
