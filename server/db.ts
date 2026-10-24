@@ -19,6 +19,49 @@ let dbInstance: SqlJsDatabase | null = null;
 let dbInitPromise: Promise<SqlJsDatabase> | null = null;
 let saveTimeout: NodeJS.Timeout | null = null;
 
+/**
+ * Robust SQL.js loader that resolves the WebAssembly binary across local dev,
+ * Vercel Serverless Functions, and bundled AWS Lambda environments.
+ */
+async function loadSqlEngine(): Promise<any> {
+  const wasmCandidates = [
+    path.join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'),
+    path.resolve('node_modules/sql.js/dist/sql-wasm.wasm'),
+    path.resolve('/var/task/node_modules/sql.js/dist/sql-wasm.wasm'),
+    path.resolve('/var/task/sql-wasm.wasm'),
+    path.join(DATA_DIR, 'sql-wasm.wasm'),
+  ];
+
+  let wasmBinary: Buffer | undefined;
+  for (const candidate of wasmCandidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        wasmBinary = fs.readFileSync(candidate);
+        break;
+      }
+    } catch (e) {
+      // Ignore individual candidate read errors
+    }
+  }
+
+  if (wasmBinary) {
+    const u8 = new Uint8Array(wasmBinary);
+    const arrayBuffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+    return await initSqlJs({ wasmBinary: arrayBuffer });
+  }
+
+  return await initSqlJs({
+    locateFile: (file: string) => {
+      for (const candidate of wasmCandidates) {
+        if (candidate.endsWith(file) && fs.existsSync(candidate)) {
+          return candidate;
+        }
+      }
+      return file;
+    },
+  });
+}
+
 export async function getDb(): Promise<SqlJsDatabase> {
   if (dbInstance) {
     return dbInstance;
@@ -28,37 +71,45 @@ export async function getDb(): Promise<SqlJsDatabase> {
   }
 
   dbInitPromise = (async () => {
-    const SQL = await initSqlJs();
     try {
-      if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-      }
-    } catch (e) {
-      console.warn('[DB] Notice: Directory creation skipped for serverless container:', e);
-    }
+      const SQL = await loadSqlEngine();
 
-    let db: SqlJsDatabase;
-    try {
-      if (fs.existsSync(DB_FILE)) {
-        const fileBuffer = fs.readFileSync(DB_FILE);
-        db = new SQL.Database(fileBuffer);
-      } else {
+      try {
+        if (!fs.existsSync(DATA_DIR)) {
+          fs.mkdirSync(DATA_DIR, { recursive: true });
+        }
+      } catch (e) {
+        console.warn('[DB] Notice: Directory creation skipped for serverless container:', e);
+      }
+
+      let db: SqlJsDatabase;
+      try {
+        if (fs.existsSync(DB_FILE)) {
+          const fileBuffer = fs.readFileSync(DB_FILE);
+          db = new SQL.Database(fileBuffer);
+        } else {
+          db = new SQL.Database();
+        }
+      } catch (e) {
         db = new SQL.Database();
       }
-    } catch (e) {
-      db = new SQL.Database();
+
+      dbInstance = db;
+      initSchema(db);
+      persistDb();
+
+      // Pull any existing students and attendance from Supabase in the background
+      pullSupabaseData(run).catch((err) => {
+        console.warn('[DB] Supabase background hydration notice:', err);
+      });
+
+      return dbInstance;
+    } catch (err) {
+      // Reset initialization promise on failure so subsequent requests can retry
+      dbInitPromise = null;
+      console.error('[DB] Database engine startup error:', err);
+      throw err;
     }
-
-    dbInstance = db;
-    initSchema(db);
-    persistDb();
-
-    // Pull any existing students and attendance from Supabase in the background
-    pullSupabaseData(run).catch((err) => {
-      console.warn('[DB] Supabase background hydration notice:', err);
-    });
-
-    return dbInstance;
   })();
 
   return dbInitPromise;

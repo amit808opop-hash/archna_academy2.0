@@ -1,20 +1,42 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL =
+// 1. Supabase Project URL
+export const SUPABASE_URL = (
   process.env.SUPABASE_URL ||
   process.env.VITE_SUPABASE_URL ||
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  'https://hhgbinzhptehhtrgqpby.supabase.co';
+  'https://hhgbinzhptehhtrgqpby.supabase.co'
+).trim().replace(/\/$/, '');
 
-const SUPABASE_KEY =
+// 2. Publishable Key (Client/Public key)
+export const SUPABASE_PUBLISHABLE_KEY = (
+  process.env.SUPABASE_PUBLISHABLE_KEY ||
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
   process.env.SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_KEY ||
   process.env.VITE_SUPABASE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  'sb_publishable_wm80iwzCXiyRmkkx8UxVng_HpeAz_wr';
+  'sb_publishable_wm80iwzCXiyRmkkx8UxVng_HpeAz_wr'
+).trim();
 
-export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+// 3. Server-Only Secret Key (Service Role - never exposed to browser)
+export const SUPABASE_SECRET_KEY = (
+  process.env.SUPABASE_SECRET_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  ''
+).trim();
+
+// 4. JWKS URL for JWT validation
+export const SUPABASE_JWKS_URL = (
+  process.env.SUPABASE_JWKS_URL ||
+  ''
+).trim();
+
+// Server-side client: Use Secret Key if available for administrative synchronization, otherwise Publishable Key
+const ACTIVE_SERVER_KEY = SUPABASE_SECRET_KEY || SUPABASE_PUBLISHABLE_KEY;
+
+export const supabase: SupabaseClient = createClient(SUPABASE_URL, ACTIVE_SERVER_KEY, {
   auth: { persistSession: false },
 });
 
@@ -31,10 +53,15 @@ const getProjectId = (url: string) => {
 
 const PROJECT_ID = process.env.SUPABASE_PROJECT_ID || getProjectId(SUPABASE_URL);
 
+// Public safe configuration (strictly masks publishable key; NEVER exposes secret key)
 export const SUPABASE_CONFIG = {
   projectId: PROJECT_ID,
   url: SUPABASE_URL,
-  keyMasked: SUPABASE_KEY ? `${SUPABASE_KEY.slice(0, 8)}...${SUPABASE_KEY.slice(-6)}` : '',
+  keyMasked: SUPABASE_PUBLISHABLE_KEY
+    ? `${SUPABASE_PUBLISHABLE_KEY.slice(0, 10)}...${SUPABASE_PUBLISHABLE_KEY.slice(-6)}`
+    : '',
+  hasSecretKey: Boolean(SUPABASE_SECRET_KEY),
+  jwksUrl: SUPABASE_JWKS_URL,
 };
 
 // SQL Schema for Supabase SQL Editor

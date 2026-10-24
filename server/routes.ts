@@ -1238,6 +1238,8 @@ apiRouter.get('/supabase/status', requireAuth, async (req: Request, res: Respons
       ...status,
       projectId: SUPABASE_CONFIG.projectId,
       url: SUPABASE_CONFIG.url,
+      keyMasked: SUPABASE_CONFIG.keyMasked,
+      hasSecretKey: SUPABASE_CONFIG.hasSecretKey,
       schemaSql: SUPABASE_SQL_SCHEMA,
     });
   } catch (err: any) {
@@ -1247,6 +1249,8 @@ apiRouter.get('/supabase/status', requireAuth, async (req: Request, res: Respons
       message: err.message || 'Error checking Supabase status',
       projectId: SUPABASE_CONFIG.projectId,
       url: SUPABASE_CONFIG.url,
+      keyMasked: SUPABASE_CONFIG.keyMasked,
+      hasSecretKey: SUPABASE_CONFIG.hasSecretKey,
       schemaSql: SUPABASE_SQL_SCHEMA,
     });
   }

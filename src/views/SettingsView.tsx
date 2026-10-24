@@ -953,7 +953,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ user, showToast, onL
                 <div>
                   <h3 className="font-bold text-slate-900 text-base">Supabase Cloud Database</h3>
                   <div className="text-xs text-slate-500">
-                    Project ID: <strong className="font-mono text-slate-800">hhgbinzhptehhtrgqpby</strong>
+                    Project ID: <strong className="font-mono text-slate-800">{supabaseStatus?.projectId || 'hhgbinzhptehhtrgqpby'}</strong>
                   </div>
                 </div>
               </div>
