@@ -1,0 +1,8 @@
+{
+  "name": "ARCHNA ACADEMY – Student Attendance Management Portal",
+  "description": "Comprehensive student attendance management system for ARCHNA ACADEMY covering Classes 1 to 10 with real-time tracking, reports, student profiles, and administrative controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
